@@ -63,13 +63,13 @@ class CotacaoResource(Resource):
         
         try:
             for dado in dados_cotacao:
-                nova_cotacao = Cotacao(
+                cotacao = Cotacao(
                     base=dado['base'],
                     moeda=dado['moeda'],
                     valor=dado['valor'],
                     data=dado['data']
                 )
-                db.session.add(nova_cotacao)
+                db.session.merge(cotacao)
             
             db.session.commit()
             return cotacao_data
@@ -122,13 +122,13 @@ class ConversaoResource(Resource):
             
             try:
                 for dado in dados_cotacao:
-                    nova_cotacao = Cotacao(
+                    cotacao = Cotacao(
                         base=dado['base'],
                         moeda=dado['moeda'],
                         valor=dado['valor'],
                         data=dado['data']
                     )
-                    db.session.add(nova_cotacao)
+                    db.session.merge(cotacao)
                 
                 db.session.commit()
                 
