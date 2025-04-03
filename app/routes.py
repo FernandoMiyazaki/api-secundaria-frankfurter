@@ -19,21 +19,6 @@ cotacao_model = api.model('Cotacao', {
     'rates': fields.Raw(description='Taxas de conversão')
 })
 
-conversao_model = api.model('Conversao', {
-    'base': fields.String(description='Moeda base', required=True),
-    'moeda': fields.String(description='Moeda de destino', required=True),
-    'valor': fields.Float(description='Valor a ser convertido', required=True)
-})
-
-resultado_conversao_model = api.model('ResultadoConversao', {
-    'valor_original': fields.Float(description='Valor original'),
-    'moeda_original': fields.String(description='Moeda original'),
-    'valor_convertido': fields.Float(description='Valor convertido'),
-    'moeda_destino': fields.String(description='Moeda de destino'),
-    'cotacao': fields.Float(description='Cotação utilizada'),
-    'data': fields.String(description='Data da cotação')
-})
-
 
 @ns_cotacao.route('/')
 class CotacaoResource(Resource):
@@ -41,7 +26,7 @@ class CotacaoResource(Resource):
     @ns_cotacao.response(200, 'Sucesso', cotacao_model)
     @ns_cotacao.response(500, 'Erro ao consultar cotação')
     def get(self):
-        """Obtém a cotação atual do USD em BRL"""
+        """Obtém a cotação atual do USD em BRL (sem persistir)"""
         # Verifica se já temos a cotação de hoje
         hoje = date.today()
         cotacao_hoje = Cotacao.query.filter_by(
@@ -56,103 +41,41 @@ class CotacaoResource(Resource):
         if not cotacao_data:
             return {'message': 'Erro ao consultar cotação externa'}, 500
         
-        # Processa os dados e salva no banco
+        # Retorna os dados sem persistir
+        return cotacao_data
+    
+    @ns_cotacao.doc('add_cotacao')
+    @ns_cotacao.response(201, 'Cotação adicionada', cotacao_model)
+    @ns_cotacao.response(500, 'Erro ao consultar ou salvar cotação')
+    def post(self):
+        """Adiciona a cotação atual do USD em BRL no banco de dados"""
+        # Consulta a API externa
+        cotacao_data = consultar_cotacao_frankfurt()
+        if not cotacao_data:
+            return {'message': 'Erro ao consultar cotação externa'}, 500
+        
+        # Processa os dados
         dados_cotacao = parse_cotacao_data(cotacao_data)
         if not dados_cotacao:
             return {'message': 'Erro ao processar dados de cotação'}, 500
         
+        # Salva no banco de dados
         try:
             for dado in dados_cotacao:
-                cotacao = Cotacao(
+                nova_cotacao = Cotacao(
                     base=dado['base'],
                     moeda=dado['moeda'],
                     valor=dado['valor'],
                     data=dado['data']
                 )
-                db.session.merge(cotacao)
+                db.session.add(nova_cotacao)
             
             db.session.commit()
-            return cotacao_data
+            return cotacao_data, 201
         except Exception as e:
             db.session.rollback()
             api.logger.error(f"Erro ao salvar cotação: {str(e)}")
-            # Retorna a cotação mesmo se não conseguiu salvar
-            return cotacao_data
-
-
-@ns_cotacao.route('/converter')
-class ConversaoResource(Resource):
-    @ns_cotacao.doc('converter_valor')
-    @ns_cotacao.expect(conversao_model)
-    @ns_cotacao.response(200, 'Sucesso', resultado_conversao_model)
-    @ns_cotacao.response(400, 'Dados inválidos')
-    @ns_cotacao.response(500, 'Erro ao converter valor')
-    def post(self):
-        """Converte um valor entre moedas"""
-        data = request.json
-        
-        # Verifica se os campos obrigatórios estão presentes
-        if not data or 'base' not in data or 'moeda' not in data or 'valor' not in data:
-            return {'message': 'Dados inválidos'}, 400
-        
-        base = data['base']
-        moeda = data['moeda']
-        valor = float(data['valor'])
-        
-        # Verifica se o valor é positivo
-        if valor <= 0:
-            return {'message': 'O valor deve ser maior que zero'}, 400
-        
-        # Verifica se já temos a cotação de hoje
-        hoje = date.today()
-        cotacao_hoje = Cotacao.query.filter_by(
-            base=base, moeda=moeda, data=hoje
-        ).first()
-        
-        if not cotacao_hoje:
-            # Se não tiver, consulta a API externa
-            cotacao_data = consultar_cotacao_frankfurt(base, moeda)
-            if not cotacao_data:
-                return {'message': 'Erro ao consultar cotação externa'}, 500
-            
-            # Processa os dados e salva no banco
-            dados_cotacao = parse_cotacao_data(cotacao_data)
-            if not dados_cotacao:
-                return {'message': 'Erro ao processar dados de cotação'}, 500
-            
-            try:
-                for dado in dados_cotacao:
-                    cotacao = Cotacao(
-                        base=dado['base'],
-                        moeda=dado['moeda'],
-                        valor=dado['valor'],
-                        data=dado['data']
-                    )
-                    db.session.merge(cotacao)
-                
-                db.session.commit()
-                
-                # Pega a taxa de conversão
-                taxa = cotacao_data['rates'][moeda]
-            except Exception as e:
-                db.session.rollback()
-                api.logger.error(f"Erro ao salvar cotação: {str(e)}")
-                # Continua com a conversão mesmo se não conseguiu salvar
-                taxa = cotacao_data['rates'][moeda]
-        else:
-            taxa = cotacao_hoje.valor
-        
-        # Realiza a conversão
-        valor_convertido = valor * taxa
-        
-        return {
-            'valor_original': valor,
-            'moeda_original': base,
-            'valor_convertido': valor_convertido,
-            'moeda_destino': moeda,
-            'cotacao': taxa,
-            'data': hoje.strftime('%Y-%m-%d')
-        }
+            return {'message': f'Erro ao salvar cotação: {str(e)}'}, 500
 
 
 @ns_cotacao.route('/historico')
