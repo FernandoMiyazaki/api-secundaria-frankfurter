@@ -1,7 +1,7 @@
 import os
 from flask import Flask
 from .extensions import db, migrate, cors, api
-from .routes import main, ns_cotacao
+from .routes import main, ns_cotacao, ns_transacoes
 from .config import config
 
 def create_app(config_name=None):
@@ -24,6 +24,7 @@ def create_app(config_name=None):
     
     # Adiciona namespaces à API
     api.add_namespace(ns_cotacao)
+    api.add_namespace(ns_transacoes)
     
     # Cria tabelas do banco de dados (em ambiente de desenvolvimento)
     with app.app_context():

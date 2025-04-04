@@ -33,3 +33,33 @@ class Cotacao(db.Model):
                 self.moeda: self.valor
             }
         }
+
+
+# Novo modelo para transações
+class Transacao(db.Model):
+    __tablename__ = 'transacoes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False)
+    tipo = db.Column(db.String(10), nullable=False)
+    quantidade_usd = db.Column(db.Float, nullable=False)
+    valor_brl = db.Column(db.Float, nullable=False)
+    cotacao = db.Column(db.Float, nullable=False)
+    data_transacao = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Transacao {self.id} - {self.tipo}>"
+    
+    def to_dict(self):
+        """
+        Retorna uma representação da transação em forma de dicionário para serialização
+        """
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'tipo': self.tipo,
+            'quantidade_usd': self.quantidade_usd,
+            'valor_brl': self.valor_brl,
+            'cotacao': self.cotacao,
+            'data_transacao': self.data_transacao.strftime('%Y-%m-%d %H:%M:%S') if self.data_transacao else None
+        }
